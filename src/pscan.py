@@ -4,10 +4,20 @@ import matplotlib.pyplot as plt
 import time
 import numpy as np
 
-def pscan(A, X, Y_init):
-    batch_size, state_size = Y_init.shape
-    seq_len = X.shape[1]
+def pscan(A, B, u, Y_init):
+    """
+    A: [batch, state]  # element-wise multiplication coefficient
+    B: [batch, seq_len, state]  # time-varying input coefficients
+    u: [batch, seq_len, input_dim]  # input sequence
+    Y_init: [batch, state]  # initial state
+    """
+    batch_size, seq_len, input_dim = u.shape
+    _, state_size = A.shape
     
+    # First compute B_t * u_t for each timestep
+    X = B * u  # element-wise multiplication [batch, seq_len, state]
+    
+    # Now following the log-space trick structure
     Y_init = Y_init[:, :, None]  # [batch, state, 1]
     Xa = torch.concat([Y_init, torch.transpose(X, 1, 2)], dim=-1)  # [batch, state, seq_len+1]
     
@@ -20,7 +30,6 @@ def pscan(A, X, Y_init):
     A_complex = (A < 0).to(A.dtype)
     A_ = torch.complex(A_real, A_complex * torch.pi)  # [batch, state, 1]
     
-    # Expand A_ to match sequence length
     A_ = A_.expand(-1, -1, seq_len + 1)  # [batch, state, seq_len+1]
     
     a_star = F.pad(torch.cumsum(A_, dim=-1), (1, 0))  # [batch, state, seq_len+2]
@@ -31,15 +40,14 @@ def pscan(A, X, Y_init):
     
     return torch.transpose(torch.exp(log_x).real[..., 1:], 1, 2)
 
-# Reference implementation for validation
-def sequential_scan(A, X, Y_init):
-    batch_size, state_size = Y_init.shape
-    seq_len = X.shape[1]
-    Y = torch.zeros(batch_size, seq_len, state_size).to(X.device)
+def sequential_scan(A, B, u, Y_init):
+    batch_size, seq_len, input_dim = u.shape
+    _, state_size = A.shape
+    Y = torch.zeros(batch_size, seq_len, state_size).to(u.device)
     h = Y_init
     
     for t in range(seq_len):
-        h = A * h + X[:, t, :]
+        h = A * h + B[:, t, :] * u[:, t, :]
         Y[:, t, :] = h
     
     return Y
@@ -47,15 +55,17 @@ def sequential_scan(A, X, Y_init):
 def test_correctness():
     torch.manual_seed(42)  # For reproducibility
     batch_size, seq_len, state_size = 2, 10, 3
+    input_dim = state_size  # Making input_dim same as state_size for simplicity
     
     # Create test inputs
     A = torch.randn(batch_size, state_size).to(torch.float32)
-    X = torch.randn(batch_size, seq_len, state_size).to(torch.float32)
+    B = torch.randn(batch_size, seq_len, state_size).to(torch.float32)
+    u = torch.randn(batch_size, seq_len, input_dim).to(torch.float32)
     Y_init = torch.randn(batch_size, state_size).to(torch.float32)
     
     # Compute both versions
-    result_pscan = pscan(A, X, Y_init)
-    result_sequential = sequential_scan(A, X, Y_init)
+    result_pscan = pscan(A, B, u, Y_init)
+    result_sequential = sequential_scan(A, B, u, Y_init)
     
     # Print shapes and a few values for debugging
     print("pscan shape:", result_pscan.shape)
@@ -68,26 +78,27 @@ def test_correctness():
            "Results don't match!"
     print("Correctness test passed!")
 
-# Benchmark timing
 def benchmark_timing():
-    sizes = [16, 32, 64, 128, 256, 512, 1024, 4096, 8192, 16384]
+    sizes = [16, 32, 64, 128, 256, 512, 1024, 2048, 4096]
     times_pscan = []
     times_sequential = []
     
     batch_size = 32
     state_size = 16
+    input_dim = state_size  # Making input_dim same as state_size for simplicity
     
     for seq_len in sizes:
         # Setup inputs
         A = torch.randn(batch_size, state_size).cuda()
-        X = torch.randn(batch_size, seq_len, state_size).cuda()
+        B = torch.randn(batch_size, seq_len, state_size).cuda()
+        u = torch.randn(batch_size, seq_len, input_dim).cuda()
         Y_init = torch.randn(batch_size, state_size).cuda()
         
         # Time pscan
         torch.cuda.synchronize()
         start = time.perf_counter()
         for _ in range(100):  # Average over 100 runs
-            _ = pscan(A, X, Y_init)
+            _ = pscan(A, B, u, Y_init)
         torch.cuda.synchronize()
         times_pscan.append((time.perf_counter() - start) / 100)
         
@@ -95,7 +106,7 @@ def benchmark_timing():
         torch.cuda.synchronize()
         start = time.perf_counter()
         for _ in range(100):  # Average over 100 runs
-            _ = sequential_scan(A, X, Y_init)
+            _ = sequential_scan(A, B, u, Y_init)
         torch.cuda.synchronize()
         times_sequential.append((time.perf_counter() - start) / 100)
     
@@ -105,12 +116,12 @@ def benchmark_timing():
     plt.plot(sizes, times_sequential, 'o-', label='Sequential Scan')
     plt.xlabel('Sequence Length')
     plt.ylabel('Time (seconds)')
-    plt.title('Scan Implementation Timing Comparison')
+    plt.title('Scan Implementation Timing Comparison (Time-varying B)')
     plt.legend()
     plt.grid(True)
     plt.yscale('log')
     plt.xscale('log')
-    plt.savefig("timing.png")
+    plt.savefig("timing_varying_b.png")
     plt.close()
 
 if __name__ == "__main__":
