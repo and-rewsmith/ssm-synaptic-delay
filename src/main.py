@@ -23,7 +23,7 @@ HIDDEN_DIM = 64
 CHANNELS = NUM_BINS
 TIMESTEPS = SEQUENCE_LENGTH
 LEARNING_RATE = 1e-2
-NUM_EPOCHS = 150
+NUM_EPOCHS = 1000
 OUTPUT_DIM = NUM_BINS
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -57,6 +57,9 @@ class SSMSynapticDelay(nn.Module):
 
     def forward(self, x):
         return self.multilayer(x)
+    
+    def init_buffer(self, batch_size):
+        pass
 
 class SSMSynapticDelayLayer(nn.Module):
     def __init__(self, input_dim, hidden_dim):
@@ -145,23 +148,46 @@ def inference_and_plot(model, inputs):
                 print("\n*** Switching from teacher forcing to autoregressive prediction ***\n")
 
             if teacher_forcing:
-                # current_input = inputs[:, :t+1, :]
-                current_input = inputs[:, t, :]
+                current_input = inputs[:, :t+1, :]
+                # current_input = inputs[:, t, :]
             else:
                 last_output = predictions[-1]
-                probabilities = torch.softmax(last_output, dim=-1)
-                predicted_indices = probabilities.argmax(dim=-1)
-                # current_input = torch.zeros_like(inputs[:, :t+1, :])
-                current_input = torch.zeros_like(inputs[:, t, :])
-                # current_input[:, -1, :].scatter_(1, predicted_indices.unsqueeze(-1), 1)
-                current_input.scatter_(1, predicted_indices.unsqueeze(-1), 1)
+                assert last_output.shape == (BATCH_SIZE, NUM_BINS)
 
-            output = model(current_input.unsqueeze(1))
+                probabilities = torch.softmax(last_output, dim=-1)
+                assert probabilities.shape == (BATCH_SIZE, NUM_BINS)
+
+                predicted_indices = probabilities.argmax(dim=-1)
+                assert predicted_indices.shape == (BATCH_SIZE,)
+
+                current_input = torch.zeros_like(inputs[:, :t+1, :])
+                # current_input = torch.zeros_like(inputs[:, t, :])
+                assert current_input.shape == (BATCH_SIZE, t+1, NUM_BINS)
+
+
+                current_input[:, -1, :].scatter_(1, predicted_indices.unsqueeze(-1), 1)
+                current_input[:, :t, :] = inputs[:, :t, :]
+                # current_input.scatter_(1, predicted_indices.unsqueeze(-1), 1)
+                assert current_input.shape == (BATCH_SIZE, t+1, NUM_BINS)
+
+                # print(current_input[:, 0:5, :])
+                # print(current_input[:, -5:-1, :])
+                # input()
+
+            # output = model(current_input.unsqueeze(1))
+            output = model(current_input)
+            assert output.shape == (BATCH_SIZE, current_input.shape[1], NUM_BINS)
+
+            # print(output[:, -1, :].argmax(dim=1))
+
             predictions.append(output[:, -1, :])
 
         predictions = torch.stack(predictions, dim=1)
+        assert predictions.shape == (BATCH_SIZE, SEQUENCE_LENGTH-1, NUM_BINS)
+
         original_data = inputs[0].cpu().numpy()
         predicted_data = predictions[0].argmax(dim=-1).cpu().numpy()
+        assert predicted_data.shape == (SEQUENCE_LENGTH-1,)
 
     plt.figure(figsize=(12, 6))
     plt.plot(range(len(original_data)), original_data.argmax(axis=-1), label="Original Data", color="blue")
@@ -192,8 +218,8 @@ def main():
     data_loader = torch.utils.data.DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
 
     # Initialize model and training components
-    # model = SSMSynapticDelay().to(DEVICE)
-    model = DelayedMLP(input_size=NUM_BINS, hidden_size=HIDDEN_DIM, output_size=OUTPUT_DIM).to(DEVICE)
+    model = SSMSynapticDelay().to(DEVICE)
+    # model = DelayedMLP(input_size=NUM_BINS, hidden_size=HIDDEN_DIM, output_size=OUTPUT_DIM).to(DEVICE)
     model.init_buffer(BATCH_SIZE)
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
     criterion = nn.CrossEntropyLoss()
