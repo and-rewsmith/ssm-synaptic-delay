@@ -36,5 +36,9 @@ if __name__ == "__main__":
     # z_t = A * z_t + c_t * b_t
 
     # instead we will do some simple synaptic delay
-    # u_delayed = compute_delays(u)  # our delay matrix approach
+    # x_delayed = compute_delays(x)  # our delay matrix approach
+    # z_t = A * z_t + B * x_delayed
+    # NOTE: B can be time varying!
+
+    # then we need to convert to mamba
     # h_t = exp(δ_t * A) * h_{t-1} + δ_t * B * u_delayed_t
