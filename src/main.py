@@ -8,9 +8,10 @@ import matplotlib.pyplot as plt
 from pscan import pscan
 from synaptic_delay import compute_synaptic_delay
 
+# TODO: something is making pscan NaN -- need to dig into fn impl
 
 # Constants
-NUM_SEQUENCES = 10
+NUM_SEQUENCES = 100
 SEQUENCE_LENGTH = 200
 NUM_MODES = 3
 FREQ_RANGE = (1.5, 10.5)
@@ -21,9 +22,10 @@ BATCH_SIZE = NUM_SEQUENCES
 HIDDEN_DIM = 64
 CHANNELS = NUM_BINS
 TIMESTEPS = SEQUENCE_LENGTH
-LEARNING_RATE = 1e-2
+LEARNING_RATE = 1e-4
 NUM_EPOCHS = 2000
 OUTPUT_DIM = NUM_BINS
+MAX_NORM = 1.0
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -89,6 +91,9 @@ class SSMSynapticDelayLayer(nn.Module):
 
         # pscan_output = u + b
         pscan_output = pscan(self.A.weight, b, u, torch.zeros(x.size(1), HIDDEN_DIM).to(DEVICE))
+        print(torch.norm(pscan_output, p=2))
+        if torch.isnan(pscan_output).any():
+            input()
         assert pscan_output.shape == (BATCH_SIZE, pscan_output.shape[1], HIDDEN_DIM)
 
         return pscan_output
@@ -125,10 +130,13 @@ def train_model(model: nn.Module, data_loader: torch.utils.data.DataLoader,
             outputs = model(inputs)
             loss = criterion(outputs.view(-1, NUM_BINS), targets.view(-1))
             loss.backward()
+            nn.utils.clip_grad_norm_(model.parameters(), MAX_NORM)
             optimizer.step()
 
             total_loss += loss.item()
 
+        # print(total_loss)
+        # input()
         avg_loss = total_loss / len(data_loader)
         wandb.log({"epoch": epoch + 1, "loss": avg_loss})
         print(f"Epoch [{epoch + 1}/{num_epochs}], Loss: {avg_loss:.4f}")
