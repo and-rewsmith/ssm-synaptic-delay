@@ -6,6 +6,7 @@ import wandb
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 from pscan import pscan
+from nonlinear_through_time_delay_main import DelayedMLP
 from synaptic_delay import compute_synaptic_delay
 
 
@@ -22,7 +23,7 @@ HIDDEN_DIM = 64
 CHANNELS = NUM_BINS
 TIMESTEPS = SEQUENCE_LENGTH
 LEARNING_RATE = 1e-2
-NUM_EPOCHS = 1000
+NUM_EPOCHS = 150
 OUTPUT_DIM = NUM_BINS
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -116,7 +117,7 @@ def train_model(model: nn.Module, data_loader: torch.utils.data.DataLoader,
     for epoch in range(num_epochs):
         total_loss = 0.0
         for inputs, targets in data_loader:
-            # model.init_buffer(BATCH_SIZE)
+            model.init_buffer(BATCH_SIZE)
             inputs, targets = inputs.to(DEVICE), targets.to(DEVICE)
             optimizer.zero_grad()
             assert inputs.shape == (BATCH_SIZE, SEQUENCE_LENGTH-1, NUM_BINS)
@@ -132,7 +133,7 @@ def train_model(model: nn.Module, data_loader: torch.utils.data.DataLoader,
         print(f"Epoch [{epoch + 1}/{num_epochs}], Loss: {avg_loss:.4f}")
 
 def inference_and_plot(model, inputs):
-    # model.init_buffer(BATCH_SIZE)
+    model.init_buffer(BATCH_SIZE)
     model.eval()
     with torch.no_grad():
         predictions = []
@@ -144,20 +145,18 @@ def inference_and_plot(model, inputs):
                 print("\n*** Switching from teacher forcing to autoregressive prediction ***\n")
 
             if teacher_forcing:
-                current_input = inputs[:, :t+1, :]
+                # current_input = inputs[:, :t+1, :]
+                current_input = inputs[:, t, :]
             else:
                 last_output = predictions[-1]
                 probabilities = torch.softmax(last_output, dim=-1)
                 predicted_indices = probabilities.argmax(dim=-1)
-                current_input = torch.zeros_like(inputs[:, :t+1, :])
-                # print(current_input.shape)
-                # print(current_input[0, -1, :])
-                current_input[:, -1, :].scatter_(1, predicted_indices.unsqueeze(-1), 1)
-                # print(current_input[0, -1, :])
-                # input()
-                # current_input.scatter_(1, predicted_indices.unsqueeze(-1), 1)
+                # current_input = torch.zeros_like(inputs[:, :t+1, :])
+                current_input = torch.zeros_like(inputs[:, t, :])
+                # current_input[:, -1, :].scatter_(1, predicted_indices.unsqueeze(-1), 1)
+                current_input.scatter_(1, predicted_indices.unsqueeze(-1), 1)
 
-            output = model(current_input)
+            output = model(current_input.unsqueeze(1))
             predictions.append(output[:, -1, :])
 
         predictions = torch.stack(predictions, dim=1)
@@ -193,9 +192,9 @@ def main():
     data_loader = torch.utils.data.DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
 
     # Initialize model and training components
-    model = SSMSynapticDelay().to(DEVICE)
-    # model = DelayedMLP(input_size=NUM_BINS, hidden_size=HIDDEN_DIM, output_size=OUTPUT_DIM).to(DEVICE)
-    # model.init_buffer(BATCH_SIZE)
+    # model = SSMSynapticDelay().to(DEVICE)
+    model = DelayedMLP(input_size=NUM_BINS, hidden_size=HIDDEN_DIM, output_size=OUTPUT_DIM).to(DEVICE)
+    model.init_buffer(BATCH_SIZE)
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
     criterion = nn.CrossEntropyLoss()
 
