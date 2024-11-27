@@ -9,18 +9,18 @@ def compute_synaptic_delay(x, delay_proj):
     Returns:
         Delayed tensor of shape [batch, seq_len, dim]
     """
-    print("x")
-    print(x)
-    print()
+    # print("x")
+    # print(x)
+    # print()
     B, L, D = x.shape
     max_delay = delay_proj.out_features
 
     # 1. Project to get delay logits and apply softmax
     delay_logits = delay_proj(x)  # [B, L, max_delay]
     delay_weights = F.softmax(delay_logits, dim=-1)  # [B, L, max_delay]
-    print("delay weights")
-    print(delay_weights)
-    print()
+    # print("delay weights")
+    # print(delay_weights)
+    # print()
     
     delay_matrix = torch.zeros(B, L, L, device=x.device)
     # Create positional indices
@@ -37,16 +37,16 @@ def compute_synaptic_delay(x, delay_proj):
 
     # Get all valid delays
     delay_matrix = torch.zeros(B, L, L, device=x.device)
-    print()
-    print(delay_weights)
-    print(delay_weights.shape)
+    # print()
+    # print(delay_weights)
+    # print(delay_weights.shape)
     delay_matrix[:, mask] = delay_weights[:, j[mask], delays[mask]]
-    print(delay_matrix)
-    print(delay_matrix.shape)
+    # print(delay_matrix)
+    # print(delay_matrix.shape)
 
     # 3. Apply delays
     u_delayed = torch.bmm(delay_matrix, x)
-    print(u_delayed)
+    # print(u_delayed)
     
     return u_delayed
 
