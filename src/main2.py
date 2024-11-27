@@ -8,9 +8,9 @@ import matplotlib.pyplot as plt
 
 
 # Constants
-NUM_SEQUENCES = 5
+NUM_SEQUENCES = 1
 SEQUENCE_LENGTH = 200
-NUM_MODES = 4
+NUM_MODES = 1
 FREQ_RANGE = (1.5, 10.5)
 AMP_RANGE = (0.5, 1.5)
 PHASE_RANGE = (0, 2 * np.pi)
@@ -19,7 +19,7 @@ HIDDEN_SIZE = 64
 OUTPUT_SIZE = NUM_BINS
 BATCH_SIZE = NUM_SEQUENCES
 LEARNING_RATE = 1e-2
-NUM_EPOCHS = 250
+NUM_EPOCHS = 200
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
