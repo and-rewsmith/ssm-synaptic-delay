@@ -77,8 +77,8 @@ class SSMSynapticDelayLayer(nn.Module):
         x = x.transpose(0, 1)
         assert x.shape == (x.shape[0], BATCH_SIZE, self.input_dim)
         
-        # x_delayed = compute_synaptic_delay(x, self.delay_proj)
-        u = self.U(x)
+        x_delayed = compute_synaptic_delay(x, self.delay_proj)
+        u = self.U(x_delayed)
         b = torch.sigmoid(self.B(x))
 
         # transpose as pscan needs (BATCH_SIZE, TIMESTEPS, CHANNELS)
@@ -88,9 +88,8 @@ class SSMSynapticDelayLayer(nn.Module):
         assert u.shape == (BATCH_SIZE, u.shape[1], HIDDEN_DIM)
         assert b.shape == (BATCH_SIZE, u.shape[1], HIDDEN_DIM)
 
-        pscan_output = u + b
-
-        # pscan_output = pscan(self.A.weight, b, u, torch.zeros(x.size(1), HIDDEN_DIM).to(DEVICE))
+        # pscan_output = u + b
+        pscan_output = pscan(self.A.weight, b, u, torch.zeros(x.size(1), HIDDEN_DIM).to(DEVICE))
         assert pscan_output.shape == (BATCH_SIZE, pscan_output.shape[1], HIDDEN_DIM)
 
         return pscan_output
