@@ -1,8 +1,9 @@
 import torch
 from torch import nn
-
 from pscan import pscan
 from synaptic_delay import compute_synaptic_delay
+import wandb
+import numpy as np
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -33,16 +34,43 @@ class SSMSynapticDelay(nn.Module):
         assert b.shape == (BATCH_SIZE, TIMESTEPS, HIDDEN_DIM)
 
         pscan_output = pscan(self.A.weight, b, u, torch.zeros(BATCH_SIZE, HIDDEN_DIM).to(DEVICE))
+        return pscan_output.transpose(0, 1)
         
+def generate_waveforms(num_sequences: int, sequence_length: int, num_modes: int,
+                       freq_range: tuple, amp_range: tuple, phase_range: tuple) -> np.ndarray:
+    waveforms = np.zeros((num_sequences, sequence_length))
+    t = np.linspace(0, 2 * np.pi, sequence_length, endpoint=False)
+    for i in range(num_sequences):
+        for _ in range(num_modes):
+            frequency = np.random.uniform(*freq_range)
+            amplitude = np.random.uniform(*amp_range)
+            phase = np.random.uniform(*phase_range)
+            waveforms[i] += amplitude * np.sin(frequency * t + phase)
+    return waveforms
 
 
+def discretize_waveforms(waveforms: np.ndarray, num_bins: int) -> np.ndarray:
+    min_val, max_val = waveforms.min(), waveforms.max()
+    scaled_waveforms = (waveforms - min_val) / (max_val - min_val) * (num_bins - 1)
+    discretized_waveforms = np.clip(np.round(scaled_waveforms), 0, num_bins - 1).astype(int)
+    one_hot_waveforms = np.eye(num_bins)[discretized_waveforms]
+    return one_hot_waveforms
+
+def initialize_wandb():
+    wandb.init(project="ssm-synaptic-delay", config={
+        "batch_size": BATCH_SIZE,
+        "hidden_dim": HIDDEN_DIM,
+        "channels": CHANNELS,
+        "timesteps": TIMESTEPS,
+    })
 
 if __name__ == "__main__":
-    print("---")
+    initialize_wandb()
 
     x = torch.ones(TIMESTEPS, BATCH_SIZE, CHANNELS).to(DEVICE)
     model = SSMSynapticDelay().to(DEVICE)
-    model.forward(x)
+    out = model.forward(x)
+    print(out.shape)
 
     # this is dumb we shouldn't do it
     # a_t = sigma(Q * x_t)
