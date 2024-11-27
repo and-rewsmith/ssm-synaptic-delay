@@ -6,14 +6,13 @@ import wandb
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 from pscan import pscan
-from nonlinear_through_time_delay_main import DelayedMLP
 from synaptic_delay import compute_synaptic_delay
 
 
 # Constants
-NUM_SEQUENCES = 1
+NUM_SEQUENCES = 10
 SEQUENCE_LENGTH = 200
-NUM_MODES = 1
+NUM_MODES = 3
 FREQ_RANGE = (1.5, 10.5)
 AMP_RANGE = (0.5, 1.5)
 PHASE_RANGE = (0, 2 * np.pi)
@@ -23,7 +22,7 @@ HIDDEN_DIM = 64
 CHANNELS = NUM_BINS
 TIMESTEPS = SEQUENCE_LENGTH
 LEARNING_RATE = 1e-2
-NUM_EPOCHS = 1000
+NUM_EPOCHS = 2000
 OUTPUT_DIM = NUM_BINS
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -77,8 +76,8 @@ class SSMSynapticDelayLayer(nn.Module):
         x = x.transpose(0, 1)
         assert x.shape == (x.shape[0], BATCH_SIZE, self.input_dim)
         
-        x_delayed = compute_synaptic_delay(x, self.delay_proj)
-        u = self.U(x_delayed)
+        # x_delayed = compute_synaptic_delay(x, self.delay_proj, max_delay=1)
+        u = self.U(x)
         b = torch.sigmoid(self.B(x))
 
         # transpose as pscan needs (BATCH_SIZE, TIMESTEPS, CHANNELS)

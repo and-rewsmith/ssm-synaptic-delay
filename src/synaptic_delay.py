@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 
-def compute_synaptic_delay(x, delay_proj):
+def compute_synaptic_delay(x, delay_proj, max_delay=None):
     """
     Args:
         x: Input tensor of shape [batch, seq_len, dim]
@@ -13,7 +13,9 @@ def compute_synaptic_delay(x, delay_proj):
     # print(x)
     # print()
     B, L, D = x.shape
-    max_delay = delay_proj.out_features
+
+    if max_delay is None:
+        max_delay = delay_proj.out_features
 
     # 1. Project to get delay logits and apply softmax
     delay_logits = delay_proj(x)  # [B, L, max_delay]
