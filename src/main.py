@@ -16,19 +16,23 @@ class SSMSynapticDelay(nn.Module):
         super(SSMSynapticDelay, self).__init__()
 
         self.delay_proj = nn.Linear(CHANNELS, TIMESTEPS)
-        self.A = nn.Linear(CHANNELS, HIDDEN_DIM, bias=False)
-        self.B = nn.Linear(CHANNELS, HIDDEN_DIM, bias=False)
+        self.U = nn.Linear(CHANNELS, HIDDEN_DIM)
+        self.A = nn.Linear(HIDDEN_DIM, HIDDEN_DIM, bias=False) # TODO: we can use bias if we want
+        self.B = nn.Linear(CHANNELS, HIDDEN_DIM)
 
     def forward(self, x):
         assert x.shape == (TIMESTEPS, BATCH_SIZE, CHANNELS)
 
         x_delayed = compute_synaptic_delay(x, self.delay_proj)
         assert x_delayed.shape == (TIMESTEPS, BATCH_SIZE, CHANNELS)
+        u = self.U(x)
+        u = u.transpose(0, 1)
 
-        b = self.B.weight.unsqueeze(0).repeat(TIMESTEPS, 1, 1).transpose(0, 1)
-        assert b.shape == (TIMESTEPS, HIDDEN_DIM, CHANNELS)
+        b = torch.sigmoid(self.B(x))
+        b = b.transpose(0, 1)
+        assert b.shape == (BATCH_SIZE, TIMESTEPS, HIDDEN_DIM)
 
-        pscan_output = pscan(self.A.weight, b, x_delayed, torch.zeros(BATCH_SIZE, HIDDEN_DIM).to(DEVICE))
+        pscan_output = pscan(self.A.weight, b, u, torch.zeros(BATCH_SIZE, HIDDEN_DIM).to(DEVICE))
         
 
 

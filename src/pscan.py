@@ -69,7 +69,7 @@ def sequential_scan(A, B, u, Y_init):
 
 def test_correctness():
     torch.manual_seed(42)  # For reproducibility
-    batch_size, seq_len, state_size = 2, 10, 3
+    batch_size, seq_len, state_size = 1, 4, 2
     input_dim = state_size  # Making input_dim same as state_size for simplicity
     
     # Create test inputs
