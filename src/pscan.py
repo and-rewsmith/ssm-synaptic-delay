@@ -6,13 +6,13 @@ import numpy as np
 
 def pscan(A, B, u, Y_init):
     """
-    A: [batch, state]  # element-wise multiplication coefficient
+    A: [state, state]  # state transition matrix
     B: [batch, seq_len, state]  # time-varying input coefficients
     u: [batch, seq_len, input_dim]  # input sequence
     Y_init: [batch, state]  # initial state
     """
     batch_size, seq_len, input_dim = u.shape
-    _, state_size = A.shape
+    state_size, _ = A.shape
     
     # First compute B_t * u_t for each timestep
     X = B * u  # element-wise multiplication [batch, seq_len, state]
@@ -25,7 +25,11 @@ def pscan(A, B, u, Y_init):
     X_complex = (Xa < 0).to(A.dtype)
     X_ = torch.complex(X_real, X_complex * torch.pi)  # [batch, state, seq_len+1]
     
+    # Fix the diagonal extraction to maintain [batch, state] ordering
+    A_diag = A.diagonal().unsqueeze(0)  # [1, state]
+    A = A_diag.expand(batch_size, -1)  # [batch, state]
     A = A.unsqueeze(-1)  # [batch, state, 1]
+    
     A_real = torch.abs(A).log()
     A_complex = (A < 0).to(A.dtype)
     A_ = torch.complex(A_real, A_complex * torch.pi)  # [batch, state, 1]
@@ -41,13 +45,24 @@ def pscan(A, B, u, Y_init):
     return torch.transpose(torch.exp(log_x).real[..., 1:], 1, 2)
 
 def sequential_scan(A, B, u, Y_init):
+    """
+    Sequential implementation for correctness checking
+    
+    A: [state, state]  # state transition matrix
+    B: [batch, seq_len, state]  # time-varying input coefficients
+    u: [batch, seq_len, input_dim]  # input sequence
+    Y_init: [batch, state]  # initial state
+    """
     batch_size, seq_len, input_dim = u.shape
-    _, state_size = A.shape
+    state_size, _ = A.shape
     Y = torch.zeros(batch_size, seq_len, state_size).to(u.device)
     h = Y_init
     
+    # Extract diagonal elements from A for element-wise multiplication
+    A_diag = A.diagonal().unsqueeze(0)  # [1, state]
+    
     for t in range(seq_len):
-        h = A * h + B[:, t, :] * u[:, t, :]
+        h = A_diag * h + B[:, t, :] * u[:, t, :]
         Y[:, t, :] = h
     
     return Y
@@ -58,7 +73,7 @@ def test_correctness():
     input_dim = state_size  # Making input_dim same as state_size for simplicity
     
     # Create test inputs
-    A = torch.randn(batch_size, state_size).to(torch.float32)
+    A = torch.randn(state_size, state_size).to(torch.float32)
     B = torch.randn(batch_size, seq_len, state_size).to(torch.float32)
     u = torch.randn(batch_size, seq_len, input_dim).to(torch.float32)
     Y_init = torch.randn(batch_size, state_size).to(torch.float32)
@@ -89,7 +104,7 @@ def benchmark_timing():
     
     for seq_len in sizes:
         # Setup inputs
-        A = torch.randn(batch_size, state_size).cuda()
+        A = torch.randn(state_size, state_size).cuda()
         B = torch.randn(batch_size, seq_len, state_size).cuda()
         u = torch.randn(batch_size, seq_len, input_dim).cuda()
         Y_init = torch.randn(batch_size, state_size).cuda()
