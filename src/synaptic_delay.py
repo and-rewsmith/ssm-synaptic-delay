@@ -23,10 +23,21 @@ def compute_synaptic_delay(x, delay_proj):
     mask = (diff >= 0) & (diff < max_delay)  # [L, L]
     
     delay_matrix = torch.zeros(B, L, L, device=x.device)
-    for b in range(B):
-        for i in range(L):
-            for j in range(max(0, i-max_delay+1), i+1):
-                delay_matrix[b, i, j] = delay_weights[b, j, i-j]
+    # Create positional indices
+    i = torch.arange(L, device=x.device)  # [L]
+    j = torch.arange(L, device=x.device)  # [L]
+
+    # Create matrix of i,j positions
+    i = i.view(L, 1).expand(L, L)  # [L, L]
+    j = j.view(1, L).expand(L, L)  # [L, L]
+
+    # Calculate delays
+    delays = i - j  # [L, L]
+    mask = (delays >= 0) & (delays < max_delay)  # [L, L]
+
+    # Get all valid delays
+    delay_matrix = torch.zeros(B, L, L, device=x.device)
+    delay_matrix[:, mask] = delay_weights[:, j[mask], delays[mask]]
 
     # 3. Apply delays
     u_delayed = torch.bmm(delay_matrix, x)
